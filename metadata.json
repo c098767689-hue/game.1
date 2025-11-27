@@ -1,0 +1,5 @@
+{
+  "name": "Modern Warfare: Rogue Map",
+  "description": "A 3D top-down shooter game using Three.js and React. Survive waves of enemies, upgrade your weapons, and utilize unique class skills.",
+  "requestFramePermissions": []
+}
