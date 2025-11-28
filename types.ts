@@ -31,6 +31,7 @@ export interface PlayerClass {
     color: number;
     cd: number;
     icon: string;
+    duration?: number; // Duration for buff skills
     missileCount?: number;
     missileMode?: 'normal' | 'carpet';
     blastRadius?: number;
@@ -303,7 +304,7 @@ export const CLASSES: Record<string, PlayerClass> = {
     infantry: { id: 'infantry', name: "Infantry", skillName: "Precision Missile", color: 0x3b82f6, cd: 300, icon: '🚀', missileCount: 1, missileMode: 'normal' },
     engineer: { id: 'engineer', name: "Engineer", skillName: "Blast Wave", color: 0xf97316, cd: 480, icon: '💥', blastRadius: 8, blastMode: 'normal' },
     medic: { id: 'medic', name: "Medic", skillName: "Field Aid (25HP)", color: 0x10b981, cd: 1800, icon: '✚', healAmount: 25, healMode: 'normal', speedBonus: 1.05 },
-    sniper: { id: 'sniper', name: "Sniper", skillName: "One Shot", color: 0x94a3b8, cd: 600, icon: '🎯', shotCount: 1, shotMode: 'normal' }
+    sniper: { id: 'sniper', name: "Sniper", skillName: "One Shot", color: 0x94a3b8, cd: 1800, icon: '🎯', duration: 300, shotMode: 'normal' }
 };
 
 export const WEAPONS: Weapon[] = [

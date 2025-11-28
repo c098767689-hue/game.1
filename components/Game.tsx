@@ -54,6 +54,7 @@ export const Game: React.FC = () => {
         weaponDamageMult: 1.0,
         weaponIdx: 0, 
         sniperBuff: false,
+        sniperBuffTimer: 0,
         sniperShotCount: 0,
         invulnerable: 0,
         lastWeaponUpgradeScore: 0,
@@ -335,6 +336,7 @@ export const Game: React.FC = () => {
             lastSkillUpgradeScore: 0,
             invulnerable: 0,
             sniperBuff: false,
+            sniperBuffTimer: 0,
             damageIntensity: 0,
             nextSkillUpgradeScore: CONFIG.scorePerSkillUpgrade,
             nextWeaponUpgradeScore: CONFIG.scorePerWeaponUpgrade,
@@ -375,7 +377,7 @@ export const Game: React.FC = () => {
         CLASSES.infantry.missileCount = 1; CLASSES.infantry.missileMode = 'normal'; CLASSES.infantry.cd = 300;
         CLASSES.engineer.blastRadius = 8; CLASSES.engineer.blastMode = 'normal'; CLASSES.engineer.cd = 480;
         CLASSES.medic.healAmount = 25; CLASSES.medic.healMode = 'normal'; CLASSES.medic.cd = 1800;
-        CLASSES.sniper.shotCount = 1; CLASSES.sniper.shotMode = 'normal'; CLASSES.sniper.cd = 600;
+        CLASSES.sniper.shotMode = 'normal'; CLASSES.sniper.cd = 1800; CLASSES.sniper.duration = 300;
 
         createObstacles();
     };
@@ -499,10 +501,6 @@ export const Game: React.FC = () => {
         let dmgMult = stateRef.current.weaponDamageMult;
         
         if (isLethal) { 
-            stateRef.current.sniperShotCount--;
-            if (stateRef.current.sniperShotCount <= 0) { 
-                stateRef.current.sniperBuff = false; 
-            }
             sfx.playShoot(0.5); 
             stateRef.current.shakeIntensity = 1.0;
         } else { 
@@ -639,8 +637,8 @@ export const Game: React.FC = () => {
             }
         } else if (currentClassId === 'sniper') {
             stateRef.current.sniperBuff = true;
-            stateRef.current.sniperShotCount = cls.shotCount || 1;
-            addFloatText(`${txt.lethalReady} x${cls.shotCount || 1}`, playerRef.current.position.x, playerRef.current.position.z, "#ffffff");
+            stateRef.current.sniperBuffTimer = cls.duration || 300;
+            addFloatText(`${txt.lethalReady}`, playerRef.current.position.x, playerRef.current.position.z, "#ffffff");
             sfx.playSniperCharge();
         }
     };
@@ -769,6 +767,14 @@ export const Game: React.FC = () => {
                  setHp(stateRef.current.hp);
                  addFloatText("+Regen", playerRef.current!.position.x, playerRef.current!.position.z, '#00ff00');
              }
+        }
+
+        // Sniper Buff Timer
+        if (stateRef.current.sniperBuffTimer > 0) {
+            stateRef.current.sniperBuffTimer--;
+            if (stateRef.current.sniperBuffTimer <= 0) {
+                stateRef.current.sniperBuff = false;
+            }
         }
 
         // Player Logic
@@ -1356,7 +1362,7 @@ export const Game: React.FC = () => {
                     ref={fogRef}
                     className="absolute inset-0 pointer-events-none z-30 transition-none"
                     style={{
-                        background: 'radial-gradient(circle 35vmax at var(--player-x, 50%) var(--player-y, 50%), transparent 0%, transparent 60%, black 100%)'
+                        background: 'radial-gradient(circle 55vmax at var(--player-x, 50%) var(--player-y, 50%), transparent 0%, transparent 60%, black 100%)'
                     }}
                 />
             )}
