@@ -409,20 +409,77 @@ export const Game: React.FC = () => {
         const isElite = Math.random() < CONFIG.eliteChance;
         const isRanged = !isElite && (Math.random() < 0.12);
         
+        // --- NEW ENEMY TYPES ---
+        let enemyType: 'melee' | 'ranged' | 'charger' | 'tank' | 'sniper' = 'melee';
+        const wave = stateRef.current.wave;
+        
+        if (isRanged) {
+            enemyType = 'ranged';
+        } else {
+            // Weights for different types based on wave
+            const roll = Math.random();
+            if (wave >= 5 && roll < 0.05) enemyType = 'sniper';
+            else if (wave >= 4 && roll < 0.1) enemyType = 'tank';
+            else if (wave >= 2 && roll < 0.25) enemyType = 'charger';
+        }
+        
         if (isElite) {
             sfx.playEliteSpawn();
+            // Spawn Visual for Elite
+            createExplosion(new THREE.Vector3(x, 1, z), 0x9333ea, 3);
+            const ringGeo = new THREE.RingGeometry(0.5, 3, 32);
+            const ringMat = new THREE.MeshBasicMaterial({ color: 0x9333ea, side: THREE.DoubleSide, transparent: true, opacity: 0.8 });
+            const ring = new THREE.Mesh(ringGeo, ringMat);
+            ring.rotation.x = -Math.PI/2;
+            ring.position.set(x, 0.2, z);
+            sceneRef.current.add(ring);
+            const fade = () => {
+                ring.scale.multiplyScalar(1.05);
+                ring.material.opacity -= 0.05;
+                if(ring.material.opacity > 0) requestAnimationFrame(fade);
+                else sceneRef.current?.remove(ring);
+            }
+            fade();
+        } else {
+            // Normal spawn flash
+            createParticle(new THREE.Vector3(x, 0.5, z), 0xffffff, 5);
         }
 
         const baseHp = 100 + stateRef.current.wave * 30;
-        const enemyHp = isElite ? baseHp * (3 + Math.random() * 3) : (isRanged ? baseHp * 0.6 : baseHp);
-        
-        let col, geo, size = isElite ? 1.5 : 0.8;
-        if (isElite) col = CONFIG.colors.enemyElite;
-        else if (isRanged) col = CONFIG.colors.enemyRanged;
-        else col = CONFIG.colors.enemy;
+        let enemyHp = baseHp;
+        let spdMult = 1.0;
+        let col = CONFIG.colors.enemy;
+        let geo: THREE.BufferGeometry = new THREE.BoxGeometry(0.8, 0.8, 0.8);
+        let size = 0.8;
 
-        if (isRanged) geo = new THREE.ConeGeometry(size / 2, size, 8);
-        else geo = new THREE.BoxGeometry(size, size, size);
+        if (enemyType === 'charger') {
+            enemyHp = baseHp * 0.6;
+            col = 0xffaa00; // Orange/Yellow
+            geo = new THREE.OctahedronGeometry(0.5);
+        } else if (enemyType === 'tank') {
+            enemyHp = baseHp * 4.0;
+            col = 0x333333; // Dark Grey
+            size = 1.5;
+            geo = new THREE.BoxGeometry(1.5, 0.8, 1.5); // Flat box
+        } else if (enemyType === 'sniper') {
+            enemyHp = baseHp * 0.8;
+            col = 0xa855f7; // Purple
+            geo = new THREE.CylinderGeometry(0.3, 0.3, 1.2, 8);
+        } else if (isRanged) {
+            enemyHp = baseHp * 0.6;
+            col = CONFIG.colors.enemyRanged;
+            geo = new THREE.ConeGeometry(0.4, 0.8, 8);
+        }
+
+        if (isElite) {
+            enemyHp *= (3 + Math.random() * 3);
+            col = CONFIG.colors.enemyElite;
+            size = 1.5;
+            // Override geo for elite? or keep shape but bigger/colored
+            if (enemyType !== 'tank') { // Tank is already big
+                geo = new THREE.BoxGeometry(1.5, 1.5, 1.5);
+            }
+        }
         
         const mat = new THREE.MeshStandardMaterial({ color: col, emissive: isElite ? 0x4a0072 : 0, emissiveIntensity: isElite ? 0.5 : 0 });
         const mesh = new THREE.Mesh(geo, mat);
@@ -436,7 +493,7 @@ export const Game: React.FC = () => {
             mesh, 
             hp: enemyHp, 
             isElite, 
-            type: isRanged ? 'ranged' : 'melee', 
+            type: enemyType,
             lastShot: 0,
             flankAngle,
             aiState: 'seeking'
@@ -964,7 +1021,7 @@ export const Game: React.FC = () => {
             
             let targetPos = playerRef.current.position.clone();
 
-            if (e.type === 'melee') {
+            if (e.type === 'melee' || e.type === 'charger' || e.type === 'tank') {
                 const flankRadius = 2.0;
                 const angle = (e.flankAngle || 0) + stateRef.current.frameCount * 0.005;
                 const offsetX = Math.cos(angle) * flankRadius;
@@ -972,19 +1029,22 @@ export const Game: React.FC = () => {
                 targetPos.x += offsetX;
                 targetPos.z += offsetZ;
             } 
-            else if (e.type === 'ranged') {
-                const idealDist = 12;
+            else if (e.type === 'ranged' || e.type === 'sniper') {
+                const idealDist = e.type === 'sniper' ? 18 : 12;
                 
-                if (distToPlayer < 20 && distToPlayer > 2) { 
-                     if (stateRef.current.frameCount - e.lastShot > 120) {
-                        const bGeo = new THREE.SphereGeometry(0.2, 8, 8);
-                        const bMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+                if (distToPlayer < (e.type === 'sniper' ? 35 : 20) && distToPlayer > 2) { 
+                    const fireRate = e.type === 'sniper' ? 240 : 120; // Sniper slower fire
+                     if (stateRef.current.frameCount - e.lastShot > fireRate) {
+                        const bGeo = new THREE.SphereGeometry(e.type === 'sniper' ? 0.3 : 0.2, 8, 8);
+                        const bMat = new THREE.MeshBasicMaterial({ color: e.type === 'sniper' ? 0xff00ff : 0xff0000 });
                         const bullet = new THREE.Mesh(bGeo, bMat);
                         bullet.position.copy(e.mesh.position); bullet.position.y = 0.6;
                         const bDir = new THREE.Vector3().subVectors(playerRef.current.position, e.mesh.position).normalize();
                         bullet.position.add(bDir.clone().multiplyScalar(0.8));
                         sceneRef.current?.add(bullet);
-                        enemyBulletsRef.current.push({ mesh: bullet, velocity: bDir.multiplyScalar(0.35), life: 100, damage: 10 });
+                        const spd = e.type === 'sniper' ? 0.8 : 0.35;
+                        const dmg = e.type === 'sniper' ? 40 : 10;
+                        enemyBulletsRef.current.push({ mesh: bullet, velocity: bDir.multiplyScalar(spd), life: 100, damage: dmg });
                         sfx.playEnemyShoot();
                         e.lastShot = stateRef.current.frameCount;
                     }
@@ -1029,13 +1089,16 @@ export const Game: React.FC = () => {
                 const dir = moveVec.normalize();
                 let spd = CONFIG.enemySpeed + (stateRef.current.wave * 0.004);
                 if (e.isElite) spd *= 0.8; if (e.type === 'ranged') spd *= 0.9;
+                if (e.type === 'charger') spd *= 1.5;
+                if (e.type === 'tank') spd *= 0.4;
+                if (e.type === 'sniper') spd *= 0.7;
                 
                 const separation = new THREE.Vector3();
                 let count = 0;
                 for (let j = 0; j < enemiesRef.current.length; j++) {
                     if (i === j) continue;
                     const dist = e.mesh.position.distanceTo(enemiesRef.current[j].mesh.position);
-                    const safeDist = (e.isElite ? 2.0 : 1.2);
+                    const safeDist = (e.isElite ? 2.0 : 1.2) + (e.type === 'tank' ? 1.0 : 0);
                     if (dist < safeDist) {
                         const push = new THREE.Vector3().subVectors(e.mesh.position, enemiesRef.current[j].mesh.position).normalize();
                         push.divideScalar(dist);
@@ -1051,7 +1114,8 @@ export const Game: React.FC = () => {
                 }
 
                 const checkCollision = (newPos: THREE.Vector3) => {
-                    const size = e.isElite ? 1.5 : 0.8;
+                    let size = e.isElite ? 1.5 : 0.8;
+                    if(e.type === 'tank') size = 1.5;
                     const eBox = new THREE.Box3().setFromCenterAndSize(newPos, new THREE.Vector3(size, size, size));
                     for (const obs of obstaclesRef.current) {
                         if (eBox.intersectsBox(obs.box)) return true;
@@ -1077,9 +1141,11 @@ export const Game: React.FC = () => {
             
             e.mesh.lookAt(playerRef.current.position);
 
-            if (e.type !== 'ranged' && distToPlayer < (e.isElite ? 1.8 : 1.2)) {
+            if ((e.type === 'melee' || e.type === 'charger' || e.type === 'tank') && distToPlayer < (e.isElite ? 1.8 : 1.2)) {
                 if (stateRef.current.invulnerable <= 0) {
-                    const dmg = e.isElite ? 1.5 : 0.5;
+                    let dmg = e.isElite ? 1.5 : 0.5;
+                    if (e.type === 'tank') dmg = 1.5;
+                    if (e.type === 'charger') dmg = 0.8;
                     
                     if (stateRef.current.shield > 0) {
                          stateRef.current.shield = Math.max(0, stateRef.current.shield - dmg);
@@ -1489,13 +1555,27 @@ export const Game: React.FC = () => {
                         <div className={`w-16 h-16 rounded-lg border-2 flex flex-col items-center justify-center relative overflow-hidden bg-black/80 transition-colors ${dashCooldownPct > 0 ? 'border-red-500 text-gray-500' : 'border-emerald-500 text-emerald-500'}`}>
                             <span className="text-[10px] absolute top-1 left-1.5 text-gray-400">SHIFT</span>
                             <span className="text-2xl">⚡</span>
-                            <div className="absolute bottom-0 left-0 w-full bg-white/20 transition-all duration-100" style={{ height: `${dashCooldownPct}%` }}></div>
+                            {/* Dark Overlay for Cooldown */}
+                            <div className="absolute bottom-0 left-0 w-full bg-gray-900/90 transition-all duration-100" style={{ height: `${dashCooldownPct}%` }}></div>
+                             {/* Timer */}
+                            {dashCooldownPct > 0 && (
+                                <span className="absolute z-10 text-white font-bold text-sm">
+                                    {(stateRef.current.dashCooldown / 60).toFixed(1)}
+                                </span>
+                            )}
                         </div>
                         {/* Class Skill */}
                         <div className={`w-16 h-16 rounded-lg border-2 flex flex-col items-center justify-center relative overflow-hidden bg-black/80 transition-colors ${skillCooldownPct > 0 ? 'border-red-500 text-gray-500' : 'border-emerald-500 text-emerald-500'} ${stateRef.current.sniperBuff ? 'border-yellow-400 shadow-[0_0_10px_#ffff00] text-yellow-400' : ''}`}>
                             <span className="text-[10px] absolute top-1 left-1.5 text-gray-400">Q</span>
                             <span className="text-2xl">{selectedClassId ? CLASSES[selectedClassId].icon : '?'}</span>
-                            <div className="absolute bottom-0 left-0 w-full bg-white/20 transition-all duration-100" style={{ height: `${skillCooldownPct}%` }}></div>
+                            {/* Dark Overlay for Cooldown */}
+                            <div className="absolute bottom-0 left-0 w-full bg-gray-900/90 transition-all duration-100" style={{ height: `${skillCooldownPct}%` }}></div>
+                            {/* Timer */}
+                            {skillCooldownPct > 0 && (
+                                <span className="absolute z-10 text-white font-bold text-lg drop-shadow-md">
+                                    {Math.ceil(stateRef.current.skillCooldown / 60)}
+                                </span>
+                            )}
                         </div>
                     </div>
                 </div>

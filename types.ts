@@ -47,7 +47,7 @@ export interface Enemy {
     mesh: THREE.Mesh;
     hp: number;
     isElite: boolean;
-    type: 'melee' | 'ranged';
+    type: 'melee' | 'ranged' | 'charger' | 'tank' | 'sniper';
     lastShot: number;
     // AI Properties
     flankAngle?: number; // For melee flanking
